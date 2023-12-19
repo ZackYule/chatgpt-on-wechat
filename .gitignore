@@ -33,3 +33,4 @@ plugins/banwords/lib/__pycache__
 try_my_server.py
 try_gemini.py
 try_open_ai.py
+pg*

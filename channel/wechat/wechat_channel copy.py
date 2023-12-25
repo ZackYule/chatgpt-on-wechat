@@ -3,6 +3,7 @@
 wechat channel
 """
 
+from datetime import datetime
 import io
 import json
 import os
@@ -22,13 +23,55 @@ from common.time_check import time_checker
 from config import conf, get_appdata_dir
 from lib import itchat
 from lib.itchat.content import *
-from common.event_message_queue import event_message_queue
+
+
+# Helper function to handle non-serializable objects
+def default_serializer(obj):
+    # Convert non-serializable objects to strings or handle them in a custom way
+    if isinstance(obj, set):
+        return list(obj)
+    return str(obj)
 
 
 @itchat.msg_register([TEXT, VOICE, PICTURE, NOTE, ATTACHMENT, SHARING])
 def handler_single_msg(msg):
     try:
+        msg_dict = dict(msg)
+
+        # Convert the dictionary to a JSON string
+        json_data = json.dumps(msg_dict, indent=4)
+
+        # Get current time and format it as a string
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Create filename with the current time
+        filename = f'itchat_message_data_{current_time}.json'
+
+        # Write the JSON data to a file with the timestamped name
+        with open(filename, 'w') as file:
+            file.write(json_data)
+
         cmsg = WechatMessage(msg, False)
+
+        msg_dict = {
+            attr: getattr(msg, attr, None)
+            for attr in dir(msg)
+            if not attr.startswith("__") and not callable(getattr(msg, attr))
+        }
+
+        # Convert the dictionary to a JSON string using custom serializer for non-serializable objects
+        json_data = json.dumps(msg_dict, indent=4, default=default_serializer)
+
+        # Get current time and format it as a string
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Create filename with the current time
+        filename = f'wechat_message_data_{current_time}.json'
+
+        # Write the JSON data to a file with the timestamped name
+        with open(filename, 'w') as file:
+            file.write(json_data)
+
     except NotImplementedError as e:
         logger.debug("[WX]single message {} skipped: {}".format(
             msg["MsgId"], e))
@@ -119,23 +162,22 @@ class WechatChannel(ChatChannel):
         self.receivedMsgs = ExpiredDict(60 * 60)
 
     def startup(self):
-        pass
-        # itchat.instance.receivingRetryCount = 600  # 修改断线超时时间
-        # # login by scan QRCode
-        # hotReload = conf().get("hot_reload", False)
-        # status_path = os.path.join(get_appdata_dir(), "itchat.pkl")
-        # itchat.auto_login(
-        #     enableCmdQR=2,
-        #     hotReload=hotReload,
-        #     statusStorageDir=status_path,
-        #     qrCallback=qrCallback,
-        # )
-        # self.user_id = itchat.instance.storageClass.userName
-        # self.name = itchat.instance.storageClass.nickName
-        # logger.info("Wechat login success, user_id: {}, nickname: {}".format(
-        #     self.user_id, self.name))
-        # # start message listener
-        # itchat.run()
+        itchat.instance.receivingRetryCount = 600  # 修改断线超时时间
+        # login by scan QRCode
+        hotReload = conf().get("hot_reload", False)
+        status_path = os.path.join(get_appdata_dir(), "itchat.pkl")
+        itchat.auto_login(
+            enableCmdQR=2,
+            hotReload=hotReload,
+            statusStorageDir=status_path,
+            qrCallback=qrCallback,
+        )
+        self.user_id = itchat.instance.storageClass.userName
+        self.name = itchat.instance.storageClass.nickName
+        logger.info("Wechat login success, user_id: {}, nickname: {}".format(
+            self.user_id, self.name))
+        # start message listener
+        itchat.run()
 
     # handle_* 系列函数处理收到的消息后构造Context，然后传入produce函数中处理Context和发送回复
     # Context包含了消息的所有信息，包括以下属性
@@ -208,64 +250,59 @@ class WechatChannel(ChatChannel):
             self.produce(context)
 
     # 统一的发送函数，每个Channel自行实现，根据reply的type字段发送不同类型的消息
-    async def send(self, reply: Reply, context: Context):
-        await event_message_queue.put(
-            {'data': {
-                'reply': reply,
-                'context': context
-            }})
-        # receiver = context["receiver"]
-        # if reply.type == ReplyType.TEXT:
-        #     itchat.send(reply.content, toUserName=receiver)
-        #     logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
-        # elif reply.type == ReplyType.ERROR or reply.type == ReplyType.INFO:
-        #     itchat.send(reply.content, toUserName=receiver)
-        #     logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
-        # elif reply.type == ReplyType.VOICE:
-        #     itchat.send_file(reply.content, toUserName=receiver)
-        #     logger.info("[WX] sendFile={}, receiver={}".format(
-        #         reply.content, receiver))
-        # elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
-        #     img_url = reply.content
-        #     logger.debug(f"[WX] start download image, img_url={img_url}")
-        #     pic_res = requests.get(img_url, stream=True)
-        #     image_storage = io.BytesIO()
-        #     size = 0
-        #     for block in pic_res.iter_content(1024):
-        #         size += len(block)
-        #         image_storage.write(block)
-        #     logger.info(
-        #         f"[WX] download image success, size={size}, img_url={img_url}")
-        #     image_storage.seek(0)
-        #     itchat.send_image(image_storage, toUserName=receiver)
-        #     logger.info("[WX] sendImage url={}, receiver={}".format(
-        #         img_url, receiver))
-        # elif reply.type == ReplyType.IMAGE:  # 从文件读取图片
-        #     image_storage = reply.content
-        #     image_storage.seek(0)
-        #     itchat.send_image(image_storage, toUserName=receiver)
-        #     logger.info("[WX] sendImage, receiver={}".format(receiver))
-        # elif reply.type == ReplyType.FILE:  # 新增文件回复类型
-        #     file_storage = reply.content
-        #     itchat.send_file(file_storage, toUserName=receiver)
-        #     logger.info("[WX] sendFile, receiver={}".format(receiver))
-        # elif reply.type == ReplyType.VIDEO:  # 新增视频回复类型
-        #     video_storage = reply.content
-        #     itchat.send_video(video_storage, toUserName=receiver)
-        #     logger.info("[WX] sendFile, receiver={}".format(receiver))
-        # elif reply.type == ReplyType.VIDEO_URL:  # 新增视频URL回复类型
-        #     video_url = reply.content
-        #     logger.debug(f"[WX] start download video, video_url={video_url}")
-        #     video_res = requests.get(video_url, stream=True)
-        #     video_storage = io.BytesIO()
-        #     size = 0
-        #     for block in video_res.iter_content(1024):
-        #         size += len(block)
-        #         video_storage.write(block)
-        #     logger.info(
-        #         f"[WX] download video success, size={size}, video_url={video_url}"
-        #     )
-        #     video_storage.seek(0)
-        #     itchat.send_video(video_storage, toUserName=receiver)
-        #     logger.info("[WX] sendVideo url={}, receiver={}".format(
-        #         video_url, receiver))
+    def send(self, reply: Reply, context: Context):
+        receiver = context["receiver"]
+        if reply.type == ReplyType.TEXT:
+            itchat.send(reply.content, toUserName=receiver)
+            logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
+        elif reply.type == ReplyType.ERROR or reply.type == ReplyType.INFO:
+            itchat.send(reply.content, toUserName=receiver)
+            logger.info("[WX] sendMsg={}, receiver={}".format(reply, receiver))
+        elif reply.type == ReplyType.VOICE:
+            itchat.send_file(reply.content, toUserName=receiver)
+            logger.info("[WX] sendFile={}, receiver={}".format(
+                reply.content, receiver))
+        elif reply.type == ReplyType.IMAGE_URL:  # 从网络下载图片
+            img_url = reply.content
+            logger.debug(f"[WX] start download image, img_url={img_url}")
+            pic_res = requests.get(img_url, stream=True)
+            image_storage = io.BytesIO()
+            size = 0
+            for block in pic_res.iter_content(1024):
+                size += len(block)
+                image_storage.write(block)
+            logger.info(
+                f"[WX] download image success, size={size}, img_url={img_url}")
+            image_storage.seek(0)
+            itchat.send_image(image_storage, toUserName=receiver)
+            logger.info("[WX] sendImage url={}, receiver={}".format(
+                img_url, receiver))
+        elif reply.type == ReplyType.IMAGE:  # 从文件读取图片
+            image_storage = reply.content
+            image_storage.seek(0)
+            itchat.send_image(image_storage, toUserName=receiver)
+            logger.info("[WX] sendImage, receiver={}".format(receiver))
+        elif reply.type == ReplyType.FILE:  # 新增文件回复类型
+            file_storage = reply.content
+            itchat.send_file(file_storage, toUserName=receiver)
+            logger.info("[WX] sendFile, receiver={}".format(receiver))
+        elif reply.type == ReplyType.VIDEO:  # 新增视频回复类型
+            video_storage = reply.content
+            itchat.send_video(video_storage, toUserName=receiver)
+            logger.info("[WX] sendFile, receiver={}".format(receiver))
+        elif reply.type == ReplyType.VIDEO_URL:  # 新增视频URL回复类型
+            video_url = reply.content
+            logger.debug(f"[WX] start download video, video_url={video_url}")
+            video_res = requests.get(video_url, stream=True)
+            video_storage = io.BytesIO()
+            size = 0
+            for block in video_res.iter_content(1024):
+                size += len(block)
+                video_storage.write(block)
+            logger.info(
+                f"[WX] download video success, size={size}, video_url={video_url}"
+            )
+            video_storage.seek(0)
+            itchat.send_video(video_storage, toUserName=receiver)
+            logger.info("[WX] sendVideo url={}, receiver={}".format(
+                video_url, receiver))

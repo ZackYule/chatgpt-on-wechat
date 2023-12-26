@@ -13,6 +13,7 @@ import requests
 
 from bridge.context import *
 from bridge.reply import *
+from bridge.universal_message import UniversalMessageWrapper
 from channel.chat_channel import ChatChannel
 from channel.wechat.wechat_message import *
 from common.expired_dict import ExpiredDict
@@ -209,11 +210,14 @@ class WechatChannel(ChatChannel):
 
     # 统一的发送函数，每个Channel自行实现，根据reply的type字段发送不同类型的消息
     async def send(self, reply: Reply, context: Context):
-        await event_message_queue.put(
-            {'data': {
-                'reply': reply,
-                'context': context
-            }})
+        receiver_id = context["receiver"]
+        wrapped_msg = UniversalMessageWrapper(
+            raw_message=reply,
+            source='my_gpt_on_wechat_backend',
+            app='wechat',
+            receiver_id=receiver_id,
+        )
+        await event_message_queue.put({'data': wrapped_msg})
         # receiver = context["receiver"]
         # if reply.type == ReplyType.TEXT:
         #     itchat.send(reply.content, toUserName=receiver)

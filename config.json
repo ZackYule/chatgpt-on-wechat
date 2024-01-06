@@ -11,7 +11,7 @@
     "single_chat_prefix": [""],
     "single_chat_reply_prefix": "",
     "group_chat_prefix": ["@小助理"],
-    "group_name_white_list": ["ChatGPT测试群", "ChatGPT测试群2"],
+    "group_name_white_list": ["ALL_GROUP"],
     "group_chat_in_one_session": ["ChatGPT测试群"],
     "image_create_prefix": ["画"],
     "speech_recognition": true,

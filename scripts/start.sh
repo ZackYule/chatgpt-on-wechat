@@ -5,6 +5,6 @@ cd `dirname $0`/..
 export BASE_DIR=`pwd`
 echo $BASE_DIR
 
-nohup pipenv run uvicorn main:app --reload --timeout-keep-alive 60 & tail -f "${BASE_DIR}/nohup.out"
+nohup pipenv run uvicorn main:app --reload --timeout-keep-alive 60 &
 
 echo "Chat_on_webchat is starting，you can check the ${BASE_DIR}/nohup.out"

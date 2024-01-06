@@ -34,3 +34,4 @@ try_gemini.py
 try_open_ai.py
 pg*
 itchat_message_data*
+json_messages

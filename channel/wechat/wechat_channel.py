@@ -153,6 +153,8 @@ class WechatChannel(ChatChannel):
     @time_checker
     @_check
     def handle_single(self, cmsg: ChatMessage):
+        self.name = cmsg._rawmsg.get('User', {}).get('Self',
+                                                     {}).get('NickName', '')
         # filter system message
         if cmsg.other_user_id in ["weixin"]:
             return
@@ -180,6 +182,8 @@ class WechatChannel(ChatChannel):
     @time_checker
     @_check
     def handle_group(self, cmsg: ChatMessage):
+        self.name = cmsg._rawmsg.get('User', {}).get('Self',
+                                                     {}).get('NickName', '')
         if cmsg.ctype == ContextType.VOICE:
             if conf().get("group_speech_recognition") != True:
                 return

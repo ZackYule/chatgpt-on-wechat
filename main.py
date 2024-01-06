@@ -12,7 +12,7 @@ import asyncio
 from app import run
 from common.event_message_queue import event_message_queue
 from contextlib import asynccontextmanager
-
+from common.massage_saver import save_message_to_json
 # async def send_heartbeat(reply, context):
 #     while True:
 #         print('正在放入心跳事件...')
@@ -86,7 +86,7 @@ async def handle_msg_endpoint(request: Request):
     try:
         data = await request.json()
         msg = data.get('raw_message', None)
-        print(msg)
+        save_message_to_json(msg)
     except json.JSONDecodeError:
         raise HTTPException(status_code=402, detail="Invalid JSON")
 
